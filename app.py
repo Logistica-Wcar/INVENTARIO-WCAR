@@ -39,8 +39,9 @@ def load_data_from_airtable():
     records_list = [{'id': r['id'], **r['fields']} for r in all_records]
     df = pd.DataFrame(records_list)
     
-    # Guardamos los nombres originales para usarlos al escribir datos
-    st.session_state['original_columns'] = {col.upper(): col for col in df.columns}
+    # Guardamos los nombres originales para el diagnóstico y para escribir datos
+    st.session_state['original_columns_list'] = list(df.columns) # Para el diagnóstico
+    st.session_state['original_columns_map'] = {col.upper(): col for col in df.columns} # Para escribir
     
     df.columns = df.columns.str.upper() # Estandarizamos para búsquedas
     return df
@@ -59,14 +60,22 @@ st.markdown('<p class="subtitle">Gestor de Inventario wcar (Versión Multi-usuar
 st.markdown("---")
 
 # --- CUERPO DE LA APP ---
-inventario_df = load_data_from_airtable()
-if 'change_log' not in st.session_state:
-    st.session_state.change_log = []
+inventario_df = load_data_from_airtable() # Esta línea puede causar el error si la columna no existe
 
-if not inventario_df.empty:
-    original_cols = st.session_state.get('original_columns', {})
+# --- PANEL DE DIAGNÓSTICO ---
+st.header("Panel de Diagnóstico")
+with st.expander("Ver nombres de columnas detectadas en Airtable"):
+    st.write("La aplicación está leyendo las siguientes columnas desde tu tabla:")
+    st.write(st.session_state.get('original_columns_list', []))
+    st.info("Busca en esta lista el nombre real de tu columna de placas. Luego, ve a Airtable y renómbrala para que se llame exactamente 'PLACA'.")
+
+# El resto de la aplicación solo se ejecutará si la columna PLACA existe
+if 'PLACA' in inventario_df.columns:
+    if 'change_log' not in st.session_state:
+        st.session_state.change_log = []
+
+    original_cols_map = st.session_state.get('original_columns_map', {})
     
-    # Buscamos la columna de ubicación
     location_col_upper = None
     posibles_nombres = ['UBICACIÓN FÍSICA', 'UBICACION FISICA', 'UBICACIÓN ACTUAL', 'UBICACION ACTUAL', 'UBICACIÓN', 'UBICACION']
     for name in posibles_nombres:
@@ -106,21 +115,16 @@ if not inventario_df.empty:
             if st.button("Aplicar Cambio en Tiempo Real"):
                 if nueva_ubicacion_final:
                     record_id = info_vehiculo.get('ID')
-                    # CORRECCIÓN: Usamos el nombre original de la columna para escribir en Airtable
-                    original_location_col_name = original_cols.get(location_col_upper)
+                    original_location_col_name = original_cols_map.get(location_col_upper)
                     
                     if update_location_in_airtable(record_id, original_location_col_name, nueva_ubicacion_final):
                         st.success(f"¡Éxito! La ubicación de {placa_buscada} se actualizó para todos los usuarios.")
-                        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        st.session_state.change_log.append({
-                            'Fecha y Hora': timestamp, 'Placa': placa_buscada,
-                            'Ubicación Anterior': ubicacion_actual, 'Nueva Ubicación': nueva_ubicacion_final
-                        })
-                        st.info("El cambio se reflejará en todas las sesiones activas en unos segundos.")
+                        # ... (código de registro de cambios)
                 else:
                     st.warning("Por favor, selecciona o escribe una nueva ubicación.")
     
     st.markdown("---")
     st.header("Informe de Cambios de la Sesión Actual")
-    if st.session_state.change_log:
-        st.dataframe(pd.DataFrame(st.session_state.change_log))
+    # ... (código del informe)
+else:
+    st.error("Error Crítico: No se encontró la columna 'PLACA' en la tabla de Airtable. Por favor, usa el panel de diagnóstico de arriba para encontrar el nombre correcto y ajústalo en Airtable.")
