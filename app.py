@@ -1,7 +1,7 @@
 # Importamos las librerías necesarias
 import streamlit as st
 import pandas as pd
-from pyairtable import Api
+from pyairtable import Api, Table # La nueva herramienta para Airtable
 from datetime import datetime
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
@@ -11,7 +11,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- ESTILOS ---
+# --- ESTILOS (Sin cambios) ---
 st.markdown("""
 <style>
     .stApp { background-color: #2E2E2E; }
@@ -24,20 +24,33 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- CONEXIÓN A AIRTABLE ---
+# --- CONEXIÓN SEGURA A AIRTABLE ---
+# La aplicación tomará las llaves secretas que configurarás en Streamlit
 try:
     api = Api(st.secrets["AIRTABLE_TOKEN"])
     table = api.table(st.secrets["BASE_ID"], st.secrets["TABLE_NAME"])
 except Exception as e:
-    st.error("Error de conexión con Airtable. Verifica las llaves secretas en los ajustes de la aplicación.")
-    st.stop()
+    st.error("Error de conexión con Airtable. Asegúrate de haber configurado las llaves secretas en los ajustes de la aplicación en Streamlit Cloud.")
+    st.stop() # Detiene la app si no se puede conectar
 
-# --- FUNCIONES PARA TRABAJAR CON AIRTABLE ---
-@st.cache_data(ttl=30)
-def load_airtable_records():
-    return table.all()
+# --- NUEVAS FUNCIONES PARA TRABAJAR CON AIRTABLE ---
+@st.cache_data(ttl=30) # Cache de 30 segundos para no sobrecargar Airtable
+def load_data_from_airtable():
+    all_records = table.all()
+    # Convertimos los datos de Airtable a un formato que conocemos (DataFrame de Pandas)
+    records_list = []
+    for record in all_records:
+        # Guardamos el ID de cada fila, es crucial para poder actualizarla después
+        rec_data = {'id': record['id']}
+        rec_data.update(record['fields'])
+        records_list.append(rec_data)
+    
+    df = pd.DataFrame(records_list)
+    df.columns = df.columns.str.upper() # Estandarizamos los nombres de columna
+    return df
 
 def update_location_in_airtable(record_id, field_name, new_location):
+    """Función que escribe el cambio directamente en Airtable."""
     try:
         table.update(record_id, {field_name: new_location})
         return True
@@ -45,102 +58,77 @@ def update_location_in_airtable(record_id, field_name, new_location):
         st.error(f"No se pudo actualizar el registro: {e}")
         return False
 
-# --- ENCABEZADO ---
+# --- ENCABEZADO DE LA APLICACIÓN ---
 st.image('Captura1.JPG', width=200)
 st.markdown('<p class="subtitle">Gestor de Inventario wcar (Versión Multi-usuario en Tiempo Real)</p>', unsafe_allow_html=True)
 st.markdown("---")
 
-# --- CUERPO DE LA APP ---
-all_records = load_airtable_records()
-
-if not all_records:
-    st.warning("No se encontraron registros en la tabla de Airtable.")
-    st.stop()
-
-# CORRECCIÓN: Ignoramos las filas vacías que no tienen un 'id'
-records_list = [{'id': r['id'], **r['fields']} for r in all_records if 'id' in r]
-
-if not records_list:
-    st.warning("Los registros de Airtable parecen estar vacíos o en un formato incorrecto.")
-    st.stop()
-    
-df_temp = pd.DataFrame(records_list)
-original_column_names = list(df_temp.columns)
-
-# --- PANEL DE DIAGNÓSTICO ---
-st.header("Panel de Diagnóstico")
-with st.expander("Ver nombres de columnas detectadas en Airtable", expanded=True):
-    st.write("La aplicación está leyendo las siguientes columnas desde tu tabla:")
-    st.write(original_column_names)
-    st.info("Busca en esta lista el nombre real de tu columna de placas. Luego, ve a Airtable y renómbrala para que se llame exactamente 'PLACA'.")
-
-# Verificamos si la columna 'PLACA' existe antes de continuar
-if 'PLACA' not in original_column_names:
-    st.error("Error Crítico: La columna 'PLACA' no se encuentra en tu tabla de Airtable. Por favor, usa la lista de arriba para encontrar el nombre correcto y ajústalo.")
-    st.stop()
-
-# Si todo está bien, continuamos con la lógica normal de la aplicación
-inventario_df = df_temp.copy()
-st.session_state['original_columns_map'] = {col.upper(): col for col in inventario_df.columns}
-inventario_df.columns = inventario_df.columns.str.upper()
-
+# --- CUERPO DE LA APLICACIÓN ---
+inventario_df = load_data_from_airtable()
+# Inicializamos el registro de cambios de la sesión
 if 'change_log' not in st.session_state:
     st.session_state.change_log = []
 
-original_cols_map = st.session_state.get('original_columns_map', {})
+if not inventario_df.empty:
+    # Lógica para encontrar el nombre de la columna de ubicación (sin cambios)
+    location_col_name_upper = None
+    posibles_nombres = ['UBICACIÓN FÍSICA', 'UBICACION FISICA', 'UBICACIÓN ACTUAL', 'UBICACION ACTUAL', 'UBICACIÓN', 'UBICACION']
+    for name in posibles_nombres:
+        if name in inventario_df.columns:
+            location_col_name_upper = name
+            break
+    
+    st.header("Buscar y Actualizar Vehículo")
+    placa_buscada = st.text_input("Ingresa la Placa a buscar:", max_chars=6).upper()
 
-location_col_upper = None
-posibles_nombres = ['UBICACIÓN FÍSICA', 'UBICACION FISICA', 'UBICACIÓN ACTUAL', 'UBICACION ACTUAL', 'UBICACIÓN', 'UBICACION']
-for name in posibles_nombres:
-    if name in inventario_df.columns:
-        location_col_upper = name
-        break
+    if placa_buscada:
+        vehiculo_encontrado = inventario_df[inventario_df['PLACA'] == placa_buscada]
 
-st.header("Buscar y Actualizar Vehículo")
-placa_buscada = st.text_input("Ingresa la Placa a buscar:", max_chars=6).upper()
+        if not vehiculo_encontrado.empty and location_col_name_upper:
+            info_vehiculo = vehiculo_encontrado.iloc[0]
+            ubicacion_actual = info_vehiculo.get(location_col_name_upper, 'No definida')
+            
+            # Visualización de la información del vehículo (sin cambios)
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown(f"""<div class="vehicle-card"><p class="label">Placa:</p><p class="value">{info_vehiculo.get('PLACA', 'N/A')}</p></div>""", unsafe_allow_html=True)
+            with col2:
+                st.markdown(f"""<div class="vehicle-card"><p class="label">Ubicación Actual:</p><p class="value">{ubicacion_actual}</p></div>""", unsafe_allow_html=True)
 
-if placa_buscada:
-    vehiculo_encontrado = inventario_df[inventario_df['PLACA'] == placa_buscada]
+            st.markdown("---")
+            st.subheader("Actualizar Ubicación")
+            
+            # Menú desplegable (sin cambios)
+            lista_ubicaciones = sorted(inventario_df[location_col_name_upper].dropna().unique().tolist())
+            opciones_menu = ["Selecciona una opción..."] + lista_ubicaciones + ["Otra (Escribir nueva)"]
+            seleccion_ubicacion = st.selectbox("Elige la nueva ubicación:", options=opciones_menu)
+            
+            nueva_ubicacion_final = ""
+            if seleccion_ubicacion == "Otra (Escribir nueva)":
+                nueva_ubicacion_final = st.text_input("Escribe el nombre de la nueva ubicación:")
+            elif seleccion_ubicacion != "Selecciona una opción...":
+                nueva_ubicacion_final = seleccion_ubicacion
 
-    if not vehiculo_encontrado.empty and location_col_upper:
-        info_vehiculo = vehiculo_encontrado.iloc[0]
-        ubicacion_actual = info_vehiculo.get(location_col_upper, 'No definida')
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown(f"""<div class="vehicle-card"><p class="label">Placa:</p><p class="value">{info_vehiculo.get('PLACA', 'N/A')}</p></div>""", unsafe_allow_html=True)
-        with col2:
-            st.markdown(f"""<div class="vehicle-card"><p class="label">Ubicación Actual:</p><p class="value">{ubicacion_actual}</p></div>""", unsafe_allow_html=True)
+            if st.button("Aplicar Cambio en Tiempo Real"):
+                if nueva_ubicacion_final:
+                    record_id = info_vehiculo.get('ID') # Obtenemos el ID de la fila
+                    if update_location_in_airtable(record_id, location_col_name_upper, nueva_ubicacion_final):
+                        st.success(f"¡Éxito! La ubicación de {placa_buscada} se actualizó en la base de datos para todos los usuarios.")
+                        # Registramos el cambio para el informe de la sesión
+                        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        st.session_state.change_log.append({
+                            'Fecha y Hora': timestamp, 'Placa': placa_buscada,
+                            'Ubicación Anterior': ubicacion_actual, 'Nueva Ubicación': nueva_ubicacion_final
+                        })
+                        st.info("La información se refrescará en 30 segundos o puedes recargar la página para ver el cambio.")
+                else:
+                    st.warning("Por favor, selecciona o escribe una nueva ubicación.")
+        # ... (manejo de errores, sin cambios)
 
-        st.markdown("---")
-        st.subheader("Actualizar Ubicación")
-        
-        lista_ubicaciones = sorted(inventario_df[location_col_upper].dropna().unique().tolist())
-        opciones_menu = ["Selecciona una opción..."] + lista_ubicaciones + ["Otra (Escribir nueva)"]
-        seleccion_ubicacion = st.selectbox("Elige la nueva ubicación:", options=opciones_menu)
-        
-        nueva_ubicacion_final = ""
-        if seleccion_ubicacion == "Otra (Escribir nueva)":
-            nueva_ubicacion_final = st.text_input("Escribe el nombre de la nueva ubicación:")
-        elif seleccion_ubicacion != "Selecciona una opción...":
-            nueva_ubicacion_final = seleccion_ubicacion
-
-        if st.button("Aplicar Cambio en Tiempo Real"):
-            if nueva_ubicacion_final:
-                record_id = info_vehiculo.get('ID')
-                original_location_col_name = original_cols_map.get(location_col_upper)
-                
-                if update_location_in_airtable(record_id, original_location_col_name, nueva_ubicacion_final):
-                    st.success(f"¡Éxito! La ubicación de {placa_buscada} se actualizó para todos los usuarios.")
-                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    st.session_state.change_log.append({
-                        'Fecha y Hora': timestamp, 'Placa': placa_buscada,
-                        'Ubicación Anterior': ubicacion_actual, 'Nueva Ubicación': nueva_ubicacion_final
-                    })
-            else:
-                st.warning("Por favor, selecciona o escribe una nueva ubicación.")
-
-st.markdown("---")
-st.header("Informe de Cambios de la Sesión Actual")
-if st.session_state.change_log:
-    st.dataframe(pd.DataFrame(st.session_state.change_log))
+    # --- SECCIÓN DE INFORME DE CAMBIOS (sin cambios) ---
+    st.markdown("---")
+    st.header("Informe de Cambios de la Sesión Actual")
+    if st.session_state.change_log:
+        st.dataframe(pd.DataFrame(st.session_state.change_log))
+    else:
+        st.info("Aún no se han realizado cambios en esta sesión.")
