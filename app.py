@@ -35,7 +35,6 @@ except Exception as e:
 # --- FUNCIONES PARA TRABAJAR CON AIRTABLE ---
 @st.cache_data(ttl=30)
 def load_airtable_records():
-    # Esta función solo trae los datos crudos, sin procesarlos.
     return table.all()
 
 def update_location_in_airtable(record_id, field_name, new_location):
@@ -58,8 +57,13 @@ if not all_records:
     st.warning("No se encontraron registros en la tabla de Airtable.")
     st.stop()
 
-# Procesamos los datos para el diagnóstico
-records_list = [{'id': r['id'], **r['fields']} for r in all_records]
+# CORRECCIÓN: Ignoramos las filas vacías que no tienen un 'id'
+records_list = [{'id': r['id'], **r['fields']} for r in all_records if 'id' in r]
+
+if not records_list:
+    st.warning("Los registros de Airtable parecen estar vacíos o en un formato incorrecto.")
+    st.stop()
+    
 df_temp = pd.DataFrame(records_list)
 original_column_names = list(df_temp.columns)
 
@@ -80,7 +84,6 @@ inventario_df = df_temp.copy()
 st.session_state['original_columns_map'] = {col.upper(): col for col in inventario_df.columns}
 inventario_df.columns = inventario_df.columns.str.upper()
 
-# ... (El resto del código es el mismo que el anterior) ...
 if 'change_log' not in st.session_state:
     st.session_state.change_log = []
 
