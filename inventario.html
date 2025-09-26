@@ -1,160 +1,40 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Control de Inventario Interactivo</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f8fafc;
-        }
-        .container {
-            max-width: 800px;
-        }
-        .card {
-            background-color: white;
-            padding: 2.5rem;
-            border-radius: 1rem;
-            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
-        }
-        input {
-            transition: all 0.3s ease-in-out;
-        }
-        input:focus {
-            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.4);
-            border-color: #2563eb;
-        }
-        .btn {
-            background-color: #2563eb;
-            color: white;
-            padding: 0.75rem 1.5rem;
-            border-radius: 0.5rem;
-            font-weight: 600;
-            transition: background-color 0.3s ease, transform 0.2s ease;
-        }
-        .btn:hover {
-            background-color: #1e40af;
-            transform: translateY(-2px);
-        }
-        .btn:disabled {
-            background-color: #93c5fd;
-            cursor: not-allowed;
-            transform: none;
-        }
-    </style>
-</head>
-<body class="flex items-center justify-center min-h-screen p-4">
+import streamlit as st
+from pyairtable import Api
 
-<div class="container mx-auto">
-    <div id="step-1" class="card space-y-6">
-        <h1 class="text-3xl font-bold text-center text-gray-900">Calculadora de Inventario</h1>
-        <p class="text-center text-gray-600">Paso 1 de 3: Ingrese la capacidad total de parqueo.</p>
-        <div>
-            <label for="outletCapacity" class="block text-gray-700 font-semibold mb-2">Capacidad OUTLET 5 PISO:</label>
-            <input type="number" id="outletCapacity" class="w-full px-4 py-2 border rounded-md focus:outline-none" value="145">
-        </div>
-        <div>
-            <label for="jumboCapacity" class="block text-gray-700 font-semibold mb-2">Capacidad JUMBO:</label>
-            <input type="number" id="jumboCapacity" class="w-full px-4 py-2 border rounded-md focus:outline-none" value="20">
-        </div>
-        <div class="flex justify-end">
-            <button id="next1" class="btn">Siguiente</button>
-        </div>
-    </div>
+st.set_page_config(layout="wide")
+st.title("🕵️‍♂️ Prueba de Conexión Directa a Airtable")
+st.write("---")
+st.info("Intentando conectar con las llaves secretas guardadas en Streamlit Cloud...")
 
-    <div id="step-2" class="card space-y-6 hidden">
-        <h1 class="text-3xl font-bold text-center text-gray-900">Calculadora de Inventario</h1>
-        <p class="text-center text-gray-600">Paso 2 de 3: Ingrese el número de vehículos en cada ubicación.</p>
-        <div>
-            <label for="outletVehicles" class="block text-gray-700 font-semibold mb-2">Vehículos en OUTLET 5 PISO:</label>
-            <input type="number" id="outletVehicles" class="w-full px-4 py-2 border rounded-md focus:outline-none" value="120">
-        </div>
-        <div>
-            <label for="jumboVehicles" class="block text-gray-700 font-semibold mb-2">Vehículos en JUMBO:</label>
-            <input type="number" id="jumboVehicles" class="w-full px-4 py-2 border rounded-md focus:outline-none" value="10">
-        </div>
-        <div class="flex justify-between">
-            <button id="back2" class="btn">Anterior</button>
-            <button id="next2" class="btn">Calcular</button>
-        </div>
-    </div>
+try:
+    # 1. Intenta usar los 'secrets' para crear la conexión
+    api = Api(st.secrets["AIRTABLE_TOKEN"])
+    st.success("✅ ¡API Token de Airtable leído correctamente!")
 
-    <div id="step-3" class="card space-y-6 hidden">
-        <h1 class="text-3xl font-bold text-center text-gray-900">Resultados del Inventario</h1>
-        <div class="space-y-4">
-            <div class="bg-gray-100 p-4 rounded-md">
-                <h2 class="text-lg font-semibold text-gray-800">OUTLET 5 PISO</h2>
-                <p class="text-sm text-gray-600 mt-2">Vehículos: <span id="resultOutletVehicles" class="font-bold text-gray-900"></span></p>
-                <p class="text-sm text-gray-600">Capacidad Total: <span id="resultOutletCapacity" class="font-bold text-gray-900"></span></p>
-                <p class="text-sm text-gray-600">Cupos Disponibles: <span id="resultOutletAvailable" class="font-bold text-green-600"></span></p>
-            </div>
-            <div class="bg-gray-100 p-4 rounded-md">
-                <h2 class="text-lg font-semibold text-gray-800">JUMBO</h2>
-                <p class="text-sm text-gray-600 mt-2">Vehículos: <span id="resultJumboVehicles" class="font-bold text-gray-900"></span></p>
-                <p class="text-sm text-gray-600">Capacidad Total: <span id="resultJumboCapacity" class="font-bold text-gray-900"></span></p>
-                <p class="text-sm text-gray-600">Cupos Disponibles: <span id="resultJumboAvailable" class="font-bold text-green-600"></span></p>
-            </div>
-        </div>
-        <div class="text-center mt-6">
-            <p class="text-2xl font-bold text-gray-800">¡Gracias por usar la calculadora!</p>
-        </div>
-        <div class="flex justify-end">
-            <button id="resetBtn" class="btn">Reiniciar</button>
-        </div>
-    </div>
-</div>
+    table = api.table(st.secrets["BASE_ID"], st.secrets["TABLE_NAME"])
+    st.success("✅ ¡Conexión a la Base y a la Tabla exitosa!")
+    st.write(f"**ID de la Base (BASE_ID):** `{st.secrets['BASE_ID']}`")
+    st.write(f"**ID de la Tabla (TABLE_NAME):** `{st.secrets['TABLE_NAME']}`")
+    st.write("---")
+    
+    # 2. Intenta leer TODOS los registros de la tabla USANDO LA NUEVA VISTA
+    st.info("Ahora, intentando leer todos los registros desde la vista 'API_View'...")
+    # --- ¡ESTA ES LA LÍNEA MODIFICADA! ---
+    all_records = table.all(view="API_View")
+    st.success(f"✅ ¡Lectura de datos completada! Se encontraron {len(all_records)} registros.")
+    
+    # 3. Muestra los primeros 5 registros para confirmar
+    st.write("A continuación se muestran los primeros 5 registros encontrados:")
+    st.json(all_records[:5])
+    
+    # Muestra los ÚLTIMOS 5 registros para verificar los datos nuevos
+    st.write("Y estos son los ÚLTIMOS 5 registros:")
+    st.json(all_records[-5:])
 
-<script>
-    document.addEventListener('DOMContentLoaded', () => {
-        const step1 = document.getElementById('step-1');
-        const step2 = document.getElementById('step-2');
-        const step3 = document.getElementById('step-3');
 
-        const next1Btn = document.getElementById('next1');
-        const back2Btn = document.getElementById('back2');
-        const next2Btn = document.getElementById('next2');
-        const resetBtn = document.getElementById('resetBtn');
+except Exception as e:
+    st.error("🚨 ¡FALLÓ LA CONEXIÓN O LA LECTURA DE DATOS! 🚨")
+    st.write("El error detallado es el siguiente. Por favor, envía una captura de este error.")
+    # st.exception() muestra el error de una forma muy clara
+    st.exception(e)
 
-        next1Btn.addEventListener('click', () => {
-            step1.classList.add('hidden');
-            step2.classList.remove('hidden');
-        });
-
-        back2Btn.addEventListener('click', () => {
-            step2.classList.add('hidden');
-            step1.classList.remove('hidden');
-        });
-
-        next2Btn.addEventListener('click', () => {
-            const outletCapacity = parseInt(document.getElementById('outletCapacity').value);
-            const jumboCapacity = parseInt(document.getElementById('jumboCapacity').value);
-            const outletVehicles = parseInt(document.getElementById('outletVehicles').value);
-            const jumboVehicles = parseInt(document.getElementById('jumboVehicles').value);
-
-            const outletAvailable = outletCapacity - outletVehicles;
-            const jumboAvailable = jumboCapacity - jumboVehicles;
-
-            document.getElementById('resultOutletVehicles').textContent = outletVehicles;
-            document.getElementById('resultOutletCapacity').textContent = outletCapacity;
-            document.getElementById('resultOutletAvailable').textContent = outletAvailable;
-
-            document.getElementById('resultJumboVehicles').textContent = jumboVehicles;
-            document.getElementById('resultJumboCapacity').textContent = jumboCapacity;
-            document.getElementById('resultJumboAvailable').textContent = jumboAvailable;
-
-            step2.classList.add('hidden');
-            step3.classList.remove('hidden');
-        });
-
-        resetBtn.addEventListener('click', () => {
-            step3.classList.add('hidden');
-            step1.classList.remove('hidden');
-        });
-    });
-</script>
-
-</body>
-</html>
