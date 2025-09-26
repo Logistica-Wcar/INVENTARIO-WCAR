@@ -70,7 +70,6 @@ else:
     # --- FUNCIONES PARA MANEJAR DATOS ---
     @st.cache_data(ttl=30)
     def load_data_from_airtable():
-        # --- ¡AQUÍ ESTÁ LA CORRECCIÓN CRÍTICA! ---
         # Le decimos a la función que lea los datos desde nuestra nueva vista sin filtros.
         all_records = table.all(view="API_View")
         records_list = [{'id': r['id'], **r['fields']} for r in all_records]
@@ -109,7 +108,6 @@ else:
     # --- SECCIÓN 1: PÁGINA DEL INVENTARIO DE VEHÍCULOS ---
     if pagina_seleccionada == "Inventario de Vehículos":
         
-        # --- ESTE ES TODO TU CÓDIGO ANTIGUO DEL INVENTARIO, YA INTEGRADO ---
         st.markdown('<p class="subtitle">Gestor de Inventario (Versión Multi-usuario en Tiempo Real)</p>', unsafe_allow_html=True)
         st.markdown("---")
         
