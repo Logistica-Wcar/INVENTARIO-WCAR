@@ -70,7 +70,9 @@ else:
     # --- FUNCIONES PARA MANEJAR DATOS ---
     @st.cache_data(ttl=30)
     def load_data_from_airtable():
-        all_records = table.all()
+        # --- ¡AQUÍ ESTÁ LA CORRECCIÓN CRÍTICA! ---
+        # Le decimos a la función que lea los datos desde nuestra nueva vista sin filtros.
+        all_records = table.all(view="API_View")
         records_list = [{'id': r['id'], **r['fields']} for r in all_records]
         df = pd.DataFrame(records_list)
         df.columns = df.columns.str.upper()
